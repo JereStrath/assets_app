@@ -2,18 +2,78 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'signup_screen.dart';
 import 'landing_page.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'services/firestore_service.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  _LoginScreenState createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  Future<void> _login() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      User? user = userCredential.user; // Ensure user is retrieved correctly
+
+      if (user != null) {
+        // Navigate to landing page only if user is authenticated
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LandingPage()),
+        );
+      } else {
+        // Show error if authentication fails
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Login failed: User not found")),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = "An error occurred. Please try again.";
+      
+      // Handle different Firebase authentication errors
+      if (e.code == 'user-not-found') {
+        errorMessage = "No user found for this email.";
+      } else if (e.code == 'wrong-password') {
+        errorMessage = "Incorrect password.";
+      } else if (e.code == 'invalid-email') {
+        errorMessage = "Invalid email format.";
+      } else {
+        errorMessage = e.message ?? "Login failed.";
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMessage)),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Login failed: ${e.toString()}")),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, // Dark background
+      backgroundColor: Colors.black,
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -22,7 +82,7 @@ class LoginScreen extends StatelessWidget {
               height: 300,
               decoration: const BoxDecoration(
                 image: DecorationImage(
-                  image: AssetImage("assets/background.png"), // Background pattern
+                  image: AssetImage("assets/background.png"),
                   fit: BoxFit.cover,
                 ),
               ),
@@ -31,7 +91,7 @@ class LoginScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Image.asset(
-                      "assets/logo.png", // Company logo
+                      "assets/logo.png",
                       height: 90,
                     ),
                     const SizedBox(height: 10),
@@ -48,7 +108,7 @@ class LoginScreen extends StatelessWidget {
                 ),
               ),
             ),
-
+            
             // Login Form Section
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 40),
@@ -62,9 +122,7 @@ class LoginScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Title
-                  Text(
-                    "Login",
+                  Text("Login",
                     style: GoogleFonts.poppins(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
@@ -72,19 +130,16 @@ class LoginScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 5),
-                  Text(
-                    "Sign in to continue.",
+                  Text("Sign in to continue.",
                     style: GoogleFonts.poppins(
                       fontSize: 14,
                       color: Colors.grey,
                     ),
                   ),
-
                   const SizedBox(height: 25),
-
-                  // Name Input
-                  Text(
-                    "NAME",
+                  
+                  // Email Input
+                  Text("EMAIL",
                     style: GoogleFonts.poppins(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -93,8 +148,9 @@ class LoginScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 5),
                   TextFormField(
+                    controller: _emailController,
                     decoration: InputDecoration(
-                      hintText: "John Doe",
+                      hintText: "example@email.com",
                       filled: true,
                       fillColor: Colors.grey[300],
                       border: OutlineInputBorder(
@@ -103,12 +159,11 @@ class LoginScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
+                  
                   const SizedBox(height: 15),
-
+                  
                   // Password Input
-                  Text(
-                    "PASSWORD",
+                  Text("PASSWORD",
                     style: GoogleFonts.poppins(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -117,6 +172,7 @@ class LoginScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 5),
                   TextFormField(
+                    controller: _passwordController,
                     obscureText: true,
                     decoration: InputDecoration(
                       hintText: "******",
@@ -128,9 +184,9 @@ class LoginScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
+                  
                   const SizedBox(height: 20),
-
+                  
                   // Login Button
                   SizedBox(
                     width: double.infinity,
@@ -142,40 +198,33 @@ class LoginScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const LandingPage()),
-                        );
-                      },
-                      child: Text(
-                        "Log in",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
+                      onPressed: _isLoading ? null : _login,
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : Text("Log in",
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              )),
                     ),
                   ),
-
+                  
                   const SizedBox(height: 15),
-
+                  
                   // Forgot Password and Signup
                   Center(
                     child: Column(
                       children: [
                         TextButton(
                           onPressed: () {},
-                          child: Text(
-                            "Forgot Password?",
+                          child: Text("Forgot Password?",
                             style: GoogleFonts.poppins(
                               fontSize: 14,
                               color: Colors.grey[700],
                             ),
                           ),
                         ),
-                        
                         TextButton(
                           onPressed: () {
                             Navigator.push(
@@ -183,8 +232,7 @@ class LoginScreen extends StatelessWidget {
                               MaterialPageRoute(builder: (context) => const SignUpScreen()),
                             );
                           },
-                          child: Text(
-                            "Signup !",
+                          child: Text("Signup !",
                             style: GoogleFonts.poppins(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,

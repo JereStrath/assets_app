@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'login_screen.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'login_screen.dart';
 import 'services/firestore_service.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'firebase_options.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -14,12 +17,67 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  DateTime? selectedDate; // Stores the selected date
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  DateTime? selectedDate;
+  bool isLoading = false; // To show loading state
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  Future<void> _signUp() async {
+    if (_nameController.text.isEmpty ||
+        _emailController.text.isEmpty ||
+        _passwordController.text.isEmpty ||
+        selectedDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("All fields are required!")),
+      );
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      // Save user data to Firestore
+      await _firestore.collection('users').doc(userCredential.user!.uid).set({
+        'name': _nameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'dob': selectedDate!.toIso8601String(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Account created successfully!")),
+      );
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? "Signup failed!")),
+      );
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, // Dark theme
+      backgroundColor: Colors.black,
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -30,7 +88,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   height: 250,
                   decoration: const BoxDecoration(
                     image: DecorationImage(
-                      image: AssetImage("assets/background.png"), // Background pattern
+                      image: AssetImage("assets/background.png"),
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -39,7 +97,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Image.asset(
-                          "assets/logo.png", // Company logo
+                          "assets/logo.png",
                           height: 90,
                         ),
                         const SizedBox(height: 10),
@@ -109,17 +167,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   const SizedBox(height: 20),
 
                   // Name Input
-                  inputField(label: "NAME", hint: "John Doe"),
+                  inputField(label: "NAME", controller: _nameController, hint: "John Doe"),
 
                   const SizedBox(height: 15),
 
                   // Email Input
-                  inputField(label: "EMAIL", hint: "johndoe@mail.com"),
+                  inputField(label: "EMAIL", controller: _emailController, hint: "johndoe@mail.com"),
 
                   const SizedBox(height: 15),
 
                   // Password Input
-                  inputField(label: "PASSWORD", hint: "******", isPassword: true),
+                  inputField(label: "PASSWORD", controller: _passwordController, hint: "******", isPassword: true),
 
                   const SizedBox(height: 15),
 
@@ -179,15 +237,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      onPressed: () {},
-                      child: Text(
-                        "Sign up",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
+                      onPressed: isLoading ? null : _signUp,
+                      child: isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : Text(
+                              "Sign up",
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -200,7 +260,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // Reusable Input Field
-  Widget inputField({required String label, required String hint, bool isPassword = false}) {
+  Widget inputField({required String label, required TextEditingController controller, required String hint, bool isPassword = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -214,6 +274,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
         const SizedBox(height: 5),
         TextFormField(
+          controller: controller,
           obscureText: isPassword,
           decoration: InputDecoration(
             hintText: hint,
